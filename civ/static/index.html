@@ -66,7 +66,7 @@ function nm(id){const a=A.find(a=>a.id===id);return a?a.n:id}
 const idx={};function byId(id){if(!idx[id])A.forEach((a,i)=>idx[a.id]=i);return idx[id]}
 function moodCol(m){return m>=2?"#8bd450":m>=1?"#c6e377":m==0?"#c9ccd4":m>=-1?"#f2a14e":"#ff4d4d"}
 function draw(){
-  const now=performance.now(),dur=1400/speed;let p=Math.min(1,(now-t0)/dur);
+  const now=performance.now(),dur=4500/speed;let p=Math.min(1,(now-t0)/dur);
   if(playing&&p>=1&&cur<F.length-1){cur++;t0=now;p=0;$("slider").value=cur;renderSide();}
   const f=F[cur],g=F[Math.max(0,cur-1)],e=p<.5?2*p*p:1-Math.pow(-2*p+2,2)/2;
   cx.fillStyle="#10141b";cx.fillRect(0,0,760,760);
@@ -117,7 +117,7 @@ function inspect(i){sel=i;const a=A[i],f=F[cur],p=f.pos[i];
 cv.onclick=ev=>{const r=cv.getBoundingClientRect(),x=(ev.clientX-r.left)/S,y=(ev.clientY-r.top)/S,P=F[cur].pos;let b=-1,bd=4;
   P.forEach((p,i)=>{const d=Math.hypot(p[0]-x,p[1]-y);if(d<bd){bd=d;b=i}});if(b>=0)inspect(b)};
 $("play").onclick=()=>{playing=!playing;$("play").textContent=playing?"❚❚":"▶";$("play").classList.toggle("on",playing)};
-$("spd").onclick=()=>{speed=speed>=4?1:speed*2;$("spd").textContent=speed+"×"};
+$("spd").onclick=()=>{speed=speed>=8?0.5:speed*2;$("spd").textContent=speed+"×"};
 $("color").onclick=()=>{colorBy=colorBy==="job"?"mood":"job";$("color").textContent="colour: "+colorBy};
 $("slider").oninput=e=>{cur=+e.target.value;t0=performance.now()-5000;renderSide()};
 $("live").onclick=async()=>{live=!live;$("live").classList.toggle("on",live);$("livebtns").style.display=live?"":"none";
