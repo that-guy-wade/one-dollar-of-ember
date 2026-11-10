@@ -1,0 +1,79 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Ember Evolve — AlphaEvolve on a $1 budget</title>
+<style>
+:root{--bg:#0d1117;--card:#161b22;--ink:#e6edf3;--mute:#8b949e;--acc:#ff7a3d;--ok:#3fb950;--line:#30363d}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 -apple-system,Segoe UI,Inter,sans-serif}
+header{padding:18px 28px 6px;display:flex;align-items:baseline;gap:16px;flex-wrap:wrap}
+h1{margin:0;font-size:26px}h1 span{color:var(--acc)}.sub{color:var(--mute)}
+.kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;padding:10px 28px}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 14px}
+.kpi b{display:block;font-size:24px;font-variant-numeric:tabular-nums}.kpi i{font-style:normal;color:var(--mute);font-size:12px}
+.grid{display:grid;grid-template-columns:1.05fr 1.05fr 1.3fr;gap:14px;padding:6px 28px 28px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+.card h3{margin:0 0 8px;font-size:13px;color:var(--mute);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+canvas{width:100%;display:block}
+.big{font-size:20px;font-weight:700}.acc{color:var(--acc)}.okc{color:var(--ok)}
+pre{margin:0;max-height:250px;overflow:auto;font:11px/1.35 ui-monospace,Menlo,monospace;color:#c9d1d9;background:#0b0f14;padding:8px;border-radius:6px}
+table{width:100%;border-collapse:collapse;font-size:12px}td{padding:3px 4px;border-bottom:1px solid var(--line)}td.n{text-align:right;font-variant-numeric:tabular-nums}
+.bar{height:8px;background:#21262d;border-radius:4px;overflow:hidden;margin-top:6px}.bar div{height:100%;background:var(--acc)}
+.span2{grid-column:span 2}
+</style></head><body>
+<header><h1><span>Ember</span> Evolve</h1>
+<div class="sub">AlphaEvolve-style program search, with Muse Ember as the mutation operator, on a $1 budget. Problem: pack 26 circles in a unit square, maximize the sum of radii.</div></header>
+<div class="kpis">
+ <div class="kpi"><i>Best score (sum of radii)</i><b id="k-best" class="acc">–</b></div>
+ <div class="kpi"><i>vs original AlphaEvolve paper (2.635862)</i><b id="k-pct">–</b></div>
+ <div class="kpi"><i>Ember spend</i><b id="k-spent">–</b><div class="bar"><div id="k-bar" style="width:0"></div></div></div>
+ <div class="kpi"><i>Mutations (programs written)</i><b id="k-calls">–</b></div>
+ <div class="kpi"><i>Tokens in / out</i><b id="k-tok">–</b></div>
+ <div class="kpi"><i>Spend to beat the AlphaEvolve paper</i><b id="k-cpi" class="okc">–</b></div>
+</div>
+<div class="grid">
+ <div class="card"><h3>Hand-written seed program</h3><canvas id="c-seed" width="460" height="460"></canvas>
+  <div class="big" id="seed-score">–</div></div>
+ <div class="card"><h3>Best program evolved by Ember <span id="best-id"></span></h3><canvas id="c-best" width="460" height="460"></canvas>
+  <div class="big acc" id="best-score">–</div><div class="sub" id="lineage" style="margin-top:6px;font-size:12px"></div></div>
+ <div class="card"><h3>Best score vs dollars spent <span style='text-transform:none;font-weight:400'>(y zoomed to 2.30+; seed sits on the floor; grey = every mutation)</span></h3><canvas id="c-chart" width="620" height="330"></canvas>
+  <div class="sub" id="status" style="margin-top:6px"></div>
+  <h3 style="margin-top:12px">Lineage leaderboard</h3><table id="tops"></table></div>
+ <div class="card"><h3>Seed code</h3><pre id="code-seed"></pre></div>
+ <div class="card span2"><h3>Evolved code (best)</h3><pre id="code-best"></pre></div>
+</div>
+<script>
+const AE=2.635862;
+const $=id=>document.getElementById(id);
+function drawPack(cv,p,color){const g=cv.getContext('2d'),W=cv.width,P=14,S=W-2*P;g.clearRect(0,0,W,W);
+ g.strokeStyle='#30363d';g.lineWidth=2;g.strokeRect(P,P,S,S);if(!p||!p.centers)return;
+ const mx=Math.max(...p.radii);
+ p.centers.forEach(([x,y],i)=>{const r=p.radii[i];if(r<=0)return;const t=r/mx;
+  g.beginPath();g.arc(P+x*S,P+(1-y)*S,r*S,0,7);g.fillStyle=color.replace('A',(0.25+0.55*t).toFixed(2));g.fill();
+  g.strokeStyle=color.replace('A','1');g.lineWidth=1.2;g.stroke();});}
+function drawChart(cv,h,budget,ae){const g=cv.getContext('2d'),W=cv.width,H=cv.height,L=46,B=28,T=10,R=12;g.clearRect(0,0,W,H);
+ const xmax=Math.max(budget,1e-6),ymin=2.3,ymax=2.66;const X=v=>L+(W-L-R)*v/xmax,Y=v=>H-B-(H-B-T)*(Math.max(ymin,Math.min(ymax,v))-ymin)/(ymax-ymin);
+ g.font='11px sans-serif';g.fillStyle='#8b949e';g.strokeStyle='#21262d';
+ for(let v=2.3;v<=2.661;v+=0.05){g.beginPath();g.moveTo(L,Y(v));g.lineTo(W-R,Y(v));g.stroke();g.fillText(v.toFixed(2),8,Y(v)+4);}
+ for(let i=0;i<=4;i++){const v=xmax*i/4;g.fillText('$'+v.toFixed(2),X(v)-(i==4?30:12),H-8);}
+ g.setLineDash([5,4]);g.strokeStyle='#3fb950';g.beginPath();g.moveTo(L,Y(ae));g.lineTo(W-R,Y(ae));g.stroke();g.setLineDash([]);
+ g.fillStyle='#3fb950';g.fillText('AlphaEvolve paper 2.635862',W-R-150,Y(ae)+12);g.strokeStyle='#e3b341';g.setLineDash([2,3]);g.beginPath();g.moveTo(L,Y(2.635983));g.lineTo(W-R,Y(2.635983));g.stroke();g.setLineDash([]);g.fillStyle='#e3b341';g.fillText('best known 2.635983',W-R-150,Y(2.635983)-5);
+ g.fillStyle='rgba(139,148,158,.45)';h.forEach(p=>{if(p.score!=null){g.beginPath();g.arc(X(p.spent),Y(Math.max(0,p.score)),2,0,7);g.fill();}});
+ g.strokeStyle='#ff7a3d';g.lineWidth=2.5;g.beginPath();h.forEach((p,i)=>{const x=X(p.spent),y=Y(p.best);i?g.lineTo(x,y):g.moveTo(x,y);});g.stroke();g.lineWidth=1;}
+async function tick(){try{const s=await (await fetch('/api/state')).json();
+ const b=s.best,sd=s.seed;
+ $('k-best').textContent=b?b.score.toFixed(6):'–';$('k-pct').textContent=b?(b.score>=AE?'+':'')+(b.score-AE).toFixed(6):'–';
+ $('k-spent').textContent='$'+s.spent.toFixed(4);$('k-bar').style.width=Math.min(100,100*s.spent/s.budget)+'%';
+ $('k-calls').textContent=s.calls+(s.calls?'  ('+Math.round(100*s.ok/s.calls)+'% ran)':'');
+ $('k-tok').textContent=(s.tok_in/1000).toFixed(0)+'k / '+(s.tok_out/1000).toFixed(0)+'k';
+ const hit=s.history.find(p=>p.best>AE);$('k-cpi').textContent=hit?'$'+hit.spent.toFixed(3):'not yet';
+ drawPack($('c-seed'),sd,'rgba(139,148,158,A)');drawPack($('c-best'),b,'rgba(255,122,61,A)');
+ $('seed-score').textContent=sd?'sum of radii = '+sd.score.toFixed(4):'';$('best-score').textContent=b?'sum of radii = '+b.score.toFixed(6)+(sd?'  ('+(b.score/sd.score).toFixed(2)+'x the seed)':''):'';
+ $('best-id').textContent=b?'#'+b.id:'';
+ if(sd&&$('code-seed').textContent!==sd.code)$('code-seed').textContent=sd.code;
+ if(b&&$('code-best').textContent!==b.code)$('code-best').textContent=b.code;
+ if(s.lineage)$('lineage').innerHTML='Lineage: '+s.lineage.map(p=>(p.parent===undefined&&p.id===0?'seed':'#'+p.id)+' <b>'+p.score.toFixed(3)+'</b>').join(' → ');
+ drawChart($('c-chart'),s.history,s.budget,AE);
+ const m=Math.floor(s.elapsed/60),sec=Math.floor(s.elapsed%60);
+ $('status').textContent=`${s.status} · ${m}m ${sec}s elapsed · model ${s.model} · budget $${s.budget.toFixed(2)} · ${s.tok_reason} reasoning tokens · ${s.failed_calls} failed calls`;
+ $('tops').innerHTML=s.top.map(p=>`<tr><td>#${p.id}</td><td class="n">${p.score.toFixed(4)}</td><td>${p.parent==null?'seed':'← #'+p.parent}</td><td style="color:#8b949e">${(p.hint||'').slice(0,48)}</td></tr>`).join('');
+ }catch(e){}setTimeout(tick,1000);}
+tick();
+</script></body></html>

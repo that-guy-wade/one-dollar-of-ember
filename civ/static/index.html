@@ -1,0 +1,132 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>A $1 Civilization · Muse Ember</title>
+<style>
+:root{--bg:#0d0f14;--pn:#161a22;--ln:#262c38;--tx:#e6e8ee;--mu:#8a93a6;--ac:#ff8a3d}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font:14px/1.4 Inter,system-ui,sans-serif}
+header{display:flex;align-items:baseline;gap:18px;padding:12px 20px;border-bottom:1px solid var(--ln)}
+h1{margin:0;font-size:22px}h1 b{color:var(--ac)}#headline{color:var(--mu);font-size:15px}
+main{display:grid;grid-template-columns:760px 1fr;gap:14px;padding:14px 20px}
+#map{background:#10141b;border:1px solid var(--ln);border-radius:10px;cursor:crosshair}
+.pn{background:var(--pn);border:1px solid var(--ln);border-radius:10px;padding:10px 12px;margin-bottom:10px}
+.pn h3{margin:0 0 6px;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--mu)}
+#ledger{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.k{background:#0f1218;border-radius:8px;padding:6px 8px}.k i{display:block;font-style:normal;color:var(--mu);font-size:11px}.k b{font-size:17px}
+#ctrl{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+button{background:#232a37;color:var(--tx);border:1px solid #333c4c;border-radius:7px;padding:5px 10px;cursor:pointer}
+button:hover{border-color:var(--ac)}button.on{background:var(--ac);color:#111}
+#slider{flex:1;min-width:160px}#clock{font-weight:700;min-width:110px}
+#feed{height:190px;overflow:auto;font-size:13px}#feed div{padding:2px 0;border-bottom:1px solid #1d222c}
+.news{color:#ffd28a;font-weight:600}.q{color:var(--mu)}
+#insp{min-height:150px;max-height:230px;overflow:auto;font-size:13px}
+.tag{display:inline-block;padding:0 6px;border-radius:5px;font-size:11px;margin-right:4px;color:#111}
+#legend{font-size:12px;color:var(--mu);margin-top:6px}#legend span{margin-right:10px;white-space:nowrap}
+#legend em{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:3px;vertical-align:middle}
+.bar{height:8px;background:#232a37;border-radius:4px;overflow:hidden;margin:2px 0 6px}.bar div{height:100%}
+#chron{display:flex;gap:8px}#chron figure{margin:0;flex:1}#chron img{width:100%;border-radius:6px}#chron figcaption{font-size:11px;color:var(--mu)}
+</style></head><body>
+<header><h1>A <b>$1</b> Civilization</h1><div id="headline">loading…</div></header>
+<main>
+<div>
+  <canvas id="map" width="760" height="760"></canvas>
+  <div id="legend"></div>
+</div>
+<div>
+  <div class="pn"><h3>Ledger · meta/muse-ember (exact usage.cost)</h3><div id="ledger"></div></div>
+  <div class="pn"><div id="ctrl">
+    <button id="play" class="on">❚❚</button><span id="clock"></span><input id="slider" type="range" min="0" value="0">
+    <button id="spd">1×</button><button id="color">colour: job</button>
+    <span style="flex-basis:100%;height:0"></span>
+    <button id="live">● Live mode</button><span id="livebtns" style="display:none">
+      <button data-inj="tick">tick</button><button data-inj="fire">🔥 fire</button><button data-inj="shortage">shortage</button>
+      <button data-inj="rumour">rumour</button><button data-inj="election">election</button><button data-inj="festival">festival</button></span>
+    <span id="livemsg" class="q"></span>
+  </div></div>
+  <div class="pn"><h3>Town state</h3><div id="town"></div></div>
+  <div class="pn"><h3>Event feed (Ember-written)</h3><div id="feed"></div></div>
+  <div class="pn" id="chronpn" style="display:none"><h3>Chronicle · painted by Muse Image</h3><div id="chron"></div></div>
+  <div class="pn"><h3>Townsperson · click a dot</h3><div id="insp" class="q">Click any dot to read its memory log.</div></div>
+</div>
+</main>
+<script>
+const JC={farmer:"#8bd450",baker:"#f2c14e",miner:"#9b8d7a",smith:"#e05d5d",merchant:"#4ec5f2",guard:"#5d7ce0",healer:"#5de0b4",priest:"#c792ea",bard:"#ff7ab8",fisher:"#3fa7a0"};
+const EC={trade:"#f2c14e",gossip:"#c792ea",help:"#8bd450",steal:"#ff4d4d",ally:"#4ea3f2",vote:"#ffffff"};
+const SL=["dawn","noon","dusk"];
+const cv=document.getElementById("map"),cx=cv.getContext("2d"),S=7.6;
+let R,F=[],A=[],cur=0,t0=performance.now(),playing=true,speed=1,colorBy="job",sel=null,live=false;
+const $=id=>document.getElementById(id);
+const IMG={};["bridge","campfire","docks","farm","forge","granary","hall","house","market","mine","school","tavern","temple","terrain","walls","well"].forEach(k=>{const i=new Image();i.src=`/static/img/${k}.webp`;IMG[k]=i});
+fetch("/static/img/chronicle.json").then(r=>r.ok?r.json():[]).then(L=>{if(!L.length)return;$("chron").innerHTML=L.map(c=>`<figure><img src="/static/img/${c.file}"><figcaption>Day ${c.day} · ${c.caption}</figcaption></figure>`).join("");$("chronpn").style.display=""}).catch(()=>{});
+async function load(url){R=await (await fetch(url)).json();A=R.agents;F=R.frames;$("slider").max=F.length-1;
+  const L=R.ledger, days=Math.ceil(F.length/3);
+  const lf=F[F.length-1],era=(R.meta.eras||[])[lf.era]||"";$("headline").innerHTML=`${A.length.toLocaleString()} Ember minds built a <b>${era.toLowerCase()}</b> of <b>${lf.nb||0} buildings</b> in <b>${days} days</b> for <b>$${L.cost.toFixed(2)}</b> · ${L.decisions.toLocaleString()} decisions · ${L.calls} calls`;
+  $("legend").innerHTML=Object.entries(JC).map(([k,c])=>`<span><em style="background:${c}"></em>${k}</span>`).join("")+
+   " · lines: "+Object.entries(EC).map(([k,c])=>`<span><em style="background:${c}"></em>${k}</span>`).join("");
+  cur=0;t0=performance.now();renderSide();}
+function nm(id){const a=A.find(a=>a.id===id);return a?a.n:id}
+const idx={};function byId(id){if(!idx[id])A.forEach((a,i)=>idx[a.id]=i);return idx[id]}
+function moodCol(m){return m>=2?"#8bd450":m>=1?"#c6e377":m==0?"#c9ccd4":m>=-1?"#f2a14e":"#ff4d4d"}
+function draw(){
+  const now=performance.now(),dur=1400/speed;let p=Math.min(1,(now-t0)/dur);
+  if(playing&&p>=1&&cur<F.length-1){cur++;t0=now;p=0;$("slider").value=cur;renderSide();}
+  const f=F[cur],g=F[Math.max(0,cur-1)],e=p<.5?2*p*p:1-Math.pow(-2*p+2,2)/2;
+  cx.fillStyle="#10141b";cx.fillRect(0,0,760,760);
+  // terrain + buildings (Muse Image sprites, generated once)
+  if(IMG.terrain.complete){cx.globalAlpha=.35;cx.drawImage(IMG.terrain,0,0,760,760);cx.globalAlpha=1}
+  const fire=f.state&&f.state.fire;
+  for(const [k,x,y,n] of (f.bl||[])){const im=IMG[k],sz=k==="house"?58:k==="campfire"?54:74;
+    if(fire&&Math.abs(fire[0]-x)<1&&Math.abs(fire[1]-y)<1){const r=40+8*Math.sin(now/120);const gr=cx.createRadialGradient(x*S,y*S,4,x*S,y*S,r*1.6);gr.addColorStop(0,"rgba(255,140,40,.95)");gr.addColorStop(1,"rgba(255,60,0,0)");cx.fillStyle=gr;cx.beginPath();cx.arc(x*S,y*S,r*1.6,0,7);cx.fill()}
+    if(im&&im.complete){cx.globalCompositeOperation="lighten";cx.drawImage(im,x*S-sz/2,y*S-sz/2,sz,sz);cx.globalCompositeOperation="source-over"}}
+  // agents
+  const P=f.pos,Q=g.pos;
+  for(let i=0;i<A.length;i++){const a=P[i],b=Q[i];const x=(b[0]+(a[0]-b[0])*e)*S,y=(b[1]+(a[1]-b[1])*e)*S;
+    cx.fillStyle=colorBy==="job"?JC[A[i].j]:moodCol(a[2]);cx.beginPath();cx.arc(x,y,i===sel?6:2.6,0,7);cx.fill();
+    if(i===sel){cx.strokeStyle="#fff";cx.lineWidth=2;cx.stroke()}}
+  // interactions of this frame
+  cx.globalAlpha=Math.max(0,1-p*0.7);cx.lineWidth=1;
+  for(const [k,a,t] of f.ev){if(!EC[k]||!t)continue;const i=byId(a),j=byId(t);if(i==null||j==null)continue;
+    cx.strokeStyle=EC[k];cx.beginPath();cx.moveTo(P[i][0]*S,P[i][1]*S);cx.lineTo(P[j][0]*S,P[j][1]*S);cx.stroke()}
+  cx.globalAlpha=1;
+  const eras=R.meta.eras||[];cx.fillStyle="rgba(10,12,18,.78)";cx.fillRect(12,12,330,56);cx.textAlign="left";
+  cx.fillStyle="#ff8a3d";cx.font="bold 24px system-ui";cx.fillText(`${(eras[f.era]||"").toUpperCase()}`,24,42);
+  cx.fillStyle="#e6e8ee";cx.font="13px system-ui";cx.fillText(`Day ${+f.d+1} · ${f.nb||0} buildings · ${f.housed||0} housed`,24,60);
+  requestAnimationFrame(draw)}
+function renderSide(){
+  const f=F[cur],L=f.ledger;$("clock").textContent=`Day ${f.d+1} · ${SL[f.s]}`;
+  const k=(i,b)=>`<div class="k"><i>${i}</i><b>${b}</b></div>`;
+  $("ledger").innerHTML=k("townsfolk",A.length.toLocaleString())+k("Ember calls",L.calls.toLocaleString())+k("decisions",L.decisions.toLocaleString())+k("$ spent","$"+L.cost.toFixed(4))+
+   k("tokens in",(L.tin/1e6).toFixed(2)+"M")+k("tokens out",(L.tout/1e6).toFixed(2)+"M")+k("decisions / $1",L.cost?Math.round(L.decisions/L.cost).toLocaleString():"–")+k("$ / mind-day",L.cost?"$"+(L.cost/A.length/((f.d)+(f.s+1)/3)).toFixed(5):"–");
+  let t=`Granary <b>${f.gran}</b> · active minds this slot <b>${f.active}</b> (Ember) / ${A.length-f.active} on routine (code)<br>`;
+  if(f.state.fire)t+=`<span class="tag" style="background:#ff8a3d">FIRE</span>`;if(f.state.shortage)t+=`<span class="tag" style="background:#f2c14e">SHORTAGE</span>`;
+  if(f.state.festival)t+=`<span class="tag" style="background:#ff7ab8">FESTIVAL</span>`;
+  const tal=f.state.tally||{},tot=Object.values(tal).reduce((a,b)=>a+b,0);
+  if(tot){t+="<br>Election: "+Object.entries(tal).map(([id,v])=>`${nm(id)} <b>${v}</b>`).join(" vs ")}
+  t+="<br>Rumour spread:";for(const [r,n] of Object.entries(f.rum))t+=`<div class="q">“${r}” — ${n} believers</div><div class="bar"><div style="width:${n/A.length*100}%;background:#c792ea"></div></div>`;
+  $("town").innerHTML=t;
+  const pr={vote:0,fire:1,steal:2,ally:3,help:4,gossip:5,protest:6,trade:7};
+  const evs=[...f.ev].sort((a,b)=>(pr[a[0]]??9)-(pr[b[0]]??9)).slice(0,14);
+  let h=f.news.map(n=>`<div class="news">📰 ${n}</div>`).join("");
+  h+=evs.map(([k,a,b,s])=>`<div><span class="tag" style="background:${EC[k]||'#ff8a3d'}">${k}</span><b>${nm(a)}</b>${b?" → "+nm(b):""} <span class="q">“${s}”</span></div>`).join("");
+  $("feed").innerHTML=`<div class="q">Day ${f.d+1} ${SL[f.s]} · ${f.nev} interactions</div>`+h;
+  if(sel!=null)inspect(sel);}
+function inspect(i){sel=i;const a=A[i],f=F[cur],p=f.pos[i];
+  const mem=a.mem.filter(m=>m[0]*3+m[1]<=f.d*3+f.s);const routine=mem.filter(m=>m[2]==="~").length;
+  $("insp").innerHTML=`<b style="font-size:15px">${a.n}</b> <span class="tag" style="background:${JC[a.j]}">${a.j}</span> ${a.h} hamlet · id ${a.id} · hunger ${p[3]}/9 · mood ${p[2]}<br>`+
+  `<span class="q">allies: ${a.allies.map(nm).join(", ")||"none"} · believes: ${a.know.join("; ")||"nothing odd"}</span><br>`+
+  mem.filter(m=>m[2]!=="~").reverse().map(m=>`<div>D${m[0]+1} ${SL[m[1]]}: <b>${m[2]}</b>${m[3]?" → "+nm(m[3]):""} <span class="q">“${m[4]}”</span></div>`).join("")+
+  `<div class="q">+ ${routine} routine slots handled by code (no tokens)</div>`;}
+cv.onclick=ev=>{const r=cv.getBoundingClientRect(),x=(ev.clientX-r.left)/S,y=(ev.clientY-r.top)/S,P=F[cur].pos;let b=-1,bd=4;
+  P.forEach((p,i)=>{const d=Math.hypot(p[0]-x,p[1]-y);if(d<bd){bd=d;b=i}});if(b>=0)inspect(b)};
+$("play").onclick=()=>{playing=!playing;$("play").textContent=playing?"❚❚":"▶";$("play").classList.toggle("on",playing)};
+$("spd").onclick=()=>{speed=speed>=4?1:speed*2;$("spd").textContent=speed+"×"};
+$("color").onclick=()=>{colorBy=colorBy==="job"?"mood":"job";$("color").textContent="colour: "+colorBy};
+$("slider").oninput=e=>{cur=+e.target.value;t0=performance.now()-5000;renderSide()};
+$("live").onclick=async()=>{live=!live;$("live").classList.toggle("on",live);$("livebtns").style.display=live?"":"none";
+  if(live){$("livemsg").textContent="fresh live world (same 1,000 people)…";await load("/api/live/state");playing=true;$("livemsg").textContent="live: each tick = 1 slot, ≤80 Ember minds, ~$0.002"}
+  else{await load("/run.json");$("livemsg").textContent=""}};
+document.querySelectorAll("[data-inj]").forEach(b=>b.onclick=async()=>{$("livemsg").textContent="Ember is deciding…";
+  const r=await (await fetch("/api/live/tick?inject="+b.dataset.inj,{method:"POST"})).json();
+  if(r.error){$("livemsg").textContent=r.error;return}
+  F.push(r.frame);A.forEach((a,i)=>{a.mem=r.mem[i];a.allies=r.allies[i];a.know=r.know[i]});R.ledger=r.frame.ledger;$("slider").max=F.length-1;cur=F.length-2;t0=performance.now();playing=true;
+  $("livemsg").textContent=`tick done: ${r.frame.active} minds, live spend $${r.frame.ledger.cost.toFixed(4)}`;});
+load("/run.json").then(()=>requestAnimationFrame(draw));
+</script></body></html>
