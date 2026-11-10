@@ -23,15 +23,21 @@ button:hover{border-color:var(--ac)}button.on{background:var(--ac);color:#111}
 #legend em{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:3px;vertical-align:middle}
 .bar{height:8px;background:#232a37;border-radius:4px;overflow:hidden;margin:2px 0 6px}.bar div{height:100%}
 #chron{display:flex;gap:8px}#chron figure{margin:0;flex:1}#chron img{width:100%;border-radius:6px}#chron figcaption{font-size:11px;color:var(--mu)}
+#card{position:absolute;right:14px;top:14px;width:360px;max-height:690px;overflow:auto;background:rgba(255,250,238,.97);color:#2b2118;border-radius:14px;padding:16px 18px;box-shadow:0 10px 40px rgba(0,0,0,.5);z-index:5;font-size:13px}
+#card .who{display:flex;gap:12px;align-items:center}#card .big{font-size:44px}#card h2{margin:0;font-size:22px}#card .sub{color:#7a6650}
+#card .stats{display:flex;gap:6px;margin:10px 0}#card .stats div{flex:1;background:#f1e6d0;border-radius:8px;padding:5px 7px;font-size:11px;color:#7a6650}#card .stats b{display:block;font-size:15px;color:#2b2118}
+#card h4{margin:12px 0 4px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#a0522d}#card .m{padding:4px 0;border-bottom:1px solid #ecdfc6}#card .m i{color:#a0522d;font-style:normal;font-size:11px;margin-right:6px}
+#card .x{float:right;cursor:pointer;color:#a0522d;font-size:18px}
 </style></head><body>
 <header><h1>A <b>$1</b> Civilization</h1><div id="headline">loading…</div></header>
 <main>
-<div>
+<div style="position:relative">
+  <div id="card" style="display:none"></div>
   <canvas id="map" width="760" height="760"></canvas>
   <div id="legend"></div>
 </div>
 <div>
-  <div class="pn"><h3>Ledger · meta/muse-ember (exact usage.cost)</h3><div id="ledger"></div></div>
+  <div class="pn"><h3>What $1 of Muse Ember bought</h3><div id="ledger"></div></div>
   <div class="pn"><div id="ctrl">
     <button id="play" class="on">❚❚</button><span id="clock"></span><input id="slider" type="range" min="0" value="0">
     <button id="spd">1×</button><button id="color">colour: job</button>
@@ -41,14 +47,15 @@ button:hover{border-color:var(--ac)}button.on{background:var(--ac);color:#111}
       <button data-inj="rumour">rumour</button><button data-inj="election">election</button><button data-inj="festival">festival</button></span>
     <span id="livemsg" class="q"></span>
   </div></div>
-  <div class="pn"><h3>Town state</h3><div id="town"></div></div>
-  <div class="pn"><h3>Event feed (Ember-written)</h3><div id="feed"></div></div>
+  <div class="pn"><h3>Town</h3><div id="town"></div></div>
+  <div class="pn"><h3>What is happening</h3><div id="feed"></div></div>
   <div class="pn" id="chronpn" style="display:none"><h3>Chronicle · painted by Muse Image</h3><div id="chron"></div></div>
-  <div class="pn"><h3>Townsperson · click a dot</h3><div id="insp" class="q">Click any dot to read its memory log.</div></div>
+  <div class="pn"><h3>Meet a villager · click anyone</h3><div id="insp" class="q">Click anyone on the map to read their story.</div></div>
 </div>
 </main>
 <script>
 const JC={farmer:"#8bd450",baker:"#f2c14e",miner:"#9b8d7a",smith:"#e05d5d",merchant:"#4ec5f2",guard:"#5d7ce0",healer:"#5de0b4",priest:"#c792ea",bard:"#ff7ab8",fisher:"#3fa7a0"};
+const EM={farmer:"👨‍🌾",baker:"🧑‍🍳",miner:"⛏️",smith:"🔨",merchant:"💰",guard:"💂",healer:"🧑‍⚕️",priest:"🙏",bard:"🎻",fisher:"🎣"};
 const EC={trade:"#f2c14e",gossip:"#c792ea",help:"#8bd450",steal:"#ff4d4d",ally:"#4ea3f2",vote:"#ffffff"};
 const SL=["dawn","noon","dusk"];
 const cv=document.getElementById("map"),cx=cv.getContext("2d"),S=7.6;
@@ -59,8 +66,7 @@ fetch("/static/img/chronicle.json").then(r=>r.ok?r.json():[]).then(L=>{if(!L.len
 async function load(url){R=await (await fetch(url)).json();A=R.agents;F=R.frames;$("slider").max=F.length-1;
   const L=R.ledger, days=Math.ceil(F.length/3);
   const lf=F[F.length-1],era=(R.meta.eras||[])[lf.era]||"";$("headline").innerHTML=`${A.length.toLocaleString()} Ember minds built a <b>${era.toLowerCase()}</b> of <b>${lf.nb||0} buildings</b> in <b>${days} days</b> for <b>$${L.cost.toFixed(2)}</b> · ${L.decisions.toLocaleString()} decisions · ${L.calls} calls`;
-  $("legend").innerHTML=Object.entries(JC).map(([k,c])=>`<span><em style="background:${c}"></em>${k}</span>`).join("")+
-   " · lines: "+Object.entries(EC).map(([k,c])=>`<span><em style="background:${c}"></em>${k}</span>`).join("");
+  $("legend").innerHTML=Object.entries(EM).map(([k,e])=>`<span>${e} ${k}</span>`).join("");
   cur=0;t0=performance.now();renderSide();}
 function nm(id){const a=A.find(a=>a.id===id);return a?a.n:id}
 const idx={};function byId(id){if(!idx[id])A.forEach((a,i)=>idx[a.id]=i);return idx[id]}
@@ -79,12 +85,13 @@ function draw(){
   // agents
   const P=f.pos,Q=g.pos;
   for(let i=0;i<A.length;i++){const a=P[i],b=Q[i];const x=(b[0]+(a[0]-b[0])*e)*S,y=(b[1]+(a[1]-b[1])*e)*S;
-    cx.fillStyle=colorBy==="job"?JC[A[i].j]:moodCol(a[2]);cx.beginPath();cx.arc(x,y,i===sel?6:2.6,0,7);cx.fill();
-    if(i===sel){cx.strokeStyle="#fff";cx.lineWidth=2;cx.stroke()}}
-  // interactions of this frame
-  cx.globalAlpha=Math.max(0,1-p*0.7);cx.lineWidth=1;
-  for(const [k,a,t] of f.ev){if(!EC[k]||!t)continue;const i=byId(a),j=byId(t);if(i==null||j==null)continue;
-    cx.strokeStyle=EC[k];cx.beginPath();cx.moveTo(P[i][0]*S,P[i][1]*S);cx.lineTo(P[j][0]*S,P[j][1]*S);cx.stroke()}
+    if(i%2&&i!==sel)continue; cx.font=(i===sel?"22px":"11px")+" sans-serif";cx.textAlign="center";cx.fillText(EM[A[i].j]||"🙂",x,y+4);
+    if(i===sel){cx.strokeStyle="#fff";cx.lineWidth=2;cx.beginPath();cx.arc(x,y,14,0,7);cx.stroke()}}
+  // speech bubbles: a few Ember-written lines from this moment
+  const said=f.ev.filter(v=>v[3]&&v[3].length>6).slice(0,4);cx.font="12px system-ui";cx.textAlign="left";
+  said.forEach(([k,a,t,q],n)=>{const i=byId(a);if(i==null)return;const x=Math.min(P[i][0]*S+8,560),y=Math.max(P[i][1]*S-14,90);
+    const txt=`${A[i].n}: “${q}”`,w=cx.measureText(txt).width+14;cx.globalAlpha=Math.min(1,p*3);cx.fillStyle="rgba(255,250,235,.93)";
+    cx.beginPath();cx.roundRect(x,y-16,w,22,8);cx.fill();cx.fillStyle="#2b2118";cx.fillText(txt,x+7,y);cx.globalAlpha=1});
   cx.globalAlpha=1;
   const eras=R.meta.eras||[];cx.fillStyle="rgba(10,12,18,.78)";cx.fillRect(12,12,330,56);cx.textAlign="left";
   cx.fillStyle="#ff8a3d";cx.font="bold 24px system-ui";cx.fillText(`${(eras[f.era]||"").toUpperCase()}`,24,42);
@@ -93,9 +100,8 @@ function draw(){
 function renderSide(){
   const f=F[cur],L=f.ledger;$("clock").textContent=`Day ${f.d+1} · ${SL[f.s]}`;
   const k=(i,b)=>`<div class="k"><i>${i}</i><b>${b}</b></div>`;
-  $("ledger").innerHTML=k("townsfolk",A.length.toLocaleString())+k("Ember calls",L.calls.toLocaleString())+k("decisions",L.decisions.toLocaleString())+k("$ spent","$"+L.cost.toFixed(4))+
-   k("tokens in",(L.tin/1e6).toFixed(2)+"M")+k("tokens out",(L.tout/1e6).toFixed(2)+"M")+k("decisions / $1",L.cost?Math.round(L.decisions/L.cost).toLocaleString():"–")+k("$ / mind-day",L.cost?"$"+(L.cost/A.length/((f.d)+(f.s+1)/3)).toFixed(5):"–");
-  let t=`Granary <b>${f.gran}</b> · active minds this slot <b>${f.active}</b> (Ember) / ${A.length-f.active} on routine (code)<br>`;
+  $("ledger").innerHTML=k("people",A.length.toLocaleString())+k("buildings",f.nb||0)+k("choices made",L.decisions.toLocaleString())+k("spent so far","$"+L.cost.toFixed(2));
+  let t=`Grain stored <b>${f.gran}</b> · <b>${f.active}</b> people making choices right now<br>`;
   if(f.state.fire)t+=`<span class="tag" style="background:#ff8a3d">FIRE</span>`;if(f.state.shortage)t+=`<span class="tag" style="background:#f2c14e">SHORTAGE</span>`;
   if(f.state.festival)t+=`<span class="tag" style="background:#ff7ab8">FESTIVAL</span>`;
   const tal=f.state.tally||{},tot=Object.values(tal).reduce((a,b)=>a+b,0);
@@ -108,13 +114,23 @@ function renderSide(){
   h+=evs.map(([k,a,b,s])=>`<div><span class="tag" style="background:${EC[k]||'#ff8a3d'}">${k}</span><b>${nm(a)}</b>${b?" → "+nm(b):""} <span class="q">“${s}”</span></div>`).join("");
   $("feed").innerHTML=`<div class="q">Day ${f.d+1} ${SL[f.s]} · ${f.nev} interactions</div>`+h;
   if(sel!=null)inspect(sel);}
-function inspect(i){sel=i;const a=A[i],f=F[cur],p=f.pos[i];
+function card(i){const a=A[i],f=F[cur],p=f.pos[i],H={N:"North",S:"South",E:"East",W:"West"};
+  const mem=a.mem.filter(m=>m[0]*3+m[1]<=f.d*3+f.s),acts=mem.filter(m=>m[2]!=="~"),mood=["miserable","unhappy","uneasy","content","happy","joyful"][Math.max(0,Math.min(5,p[2]+3))];
+  const verb={work:"worked",build:"built",vote:"voted",gossip:"gossiped",trade:"traded",help:"helped",ally:"made an ally",steal:"stole",eat:"ate",rest:"rested",protest:"protested",firefight:"fought the fire",propose:"proposed"};
+  $("card").innerHTML=`<span class="x" onclick="document.getElementById('card').style.display='none'">✕</span><div class="who"><div class="big">${EM[a.j]||"🙂"}</div><div><h2>${a.n}</h2><div class="sub">${a.j} · ${H[a.h]||a.h} hamlet · Day ${+f.d+1}</div></div></div>
+  <div class="stats"><div>mood<b>${mood}</b></div><div>hunger<b>${p[3]}/9</b></div><div>choices<b>${acts.length}</b></div><div>allies<b>${a.allies.length}</b></div></div>
+  <h4>Believes</h4><div>${a.know.length?a.know.map(k=>"“"+k+"”").join("<br>"):"nothing unusual"}</div>
+  <h4>Friends & allies</h4><div>${a.allies.map(nm).join(", ")||"none yet"}</div>
+  <h4>Their own words, day by day (written by Muse Ember)</h4>`+acts.slice().reverse().slice(0,14).map(m=>`<div class="m"><i>Day ${m[0]+1} ${SL[m[1]]}</i><b>${verb[m[2]]||m[2]}</b>${m[3]?" → "+nm(m[3]):""}${m[4]?` — “${m[4]}”`:""}</div>`).join("")+
+  `<div class="sub" style="margin-top:6px">${mem.length-acts.length} quiet moments handled by plain code (no AI cost)</div>`;
+  $("card").style.display="";}
+function inspect(i){sel=i;card(i);const a=A[i],f=F[cur],p=f.pos[i];
   const mem=a.mem.filter(m=>m[0]*3+m[1]<=f.d*3+f.s);const routine=mem.filter(m=>m[2]==="~").length;
   $("insp").innerHTML=`<b style="font-size:15px">${a.n}</b> <span class="tag" style="background:${JC[a.j]}">${a.j}</span> ${a.h} hamlet · id ${a.id} · hunger ${p[3]}/9 · mood ${p[2]}<br>`+
   `<span class="q">allies: ${a.allies.map(nm).join(", ")||"none"} · believes: ${a.know.join("; ")||"nothing odd"}</span><br>`+
   mem.filter(m=>m[2]!=="~").reverse().map(m=>`<div>D${m[0]+1} ${SL[m[1]]}: <b>${m[2]}</b>${m[3]?" → "+nm(m[3]):""} <span class="q">“${m[4]}”</span></div>`).join("")+
   `<div class="q">+ ${routine} routine slots handled by code (no tokens)</div>`;}
-cv.onclick=ev=>{const r=cv.getBoundingClientRect(),x=(ev.clientX-r.left)/S,y=(ev.clientY-r.top)/S,P=F[cur].pos;let b=-1,bd=4;
+cv.onclick=ev=>{const r=cv.getBoundingClientRect(),x=(ev.clientX-r.left)/S,y=(ev.clientY-r.top)/S,P=F[cur].pos;let b=-1,bd=6;
   P.forEach((p,i)=>{const d=Math.hypot(p[0]-x,p[1]-y);if(d<bd){bd=d;b=i}});if(b>=0)inspect(b)};
 $("play").onclick=()=>{playing=!playing;$("play").textContent=playing?"❚❚":"▶";$("play").classList.toggle("on",playing)};
 $("spd").onclick=()=>{speed=speed>=8?0.5:speed*2;$("spd").textContent=speed+"×"};
